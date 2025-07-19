@@ -1,9 +1,11 @@
-import azure.functions as func
+from fastapi import FastAPI, UploadFile, File, Response
 import tempfile
 import os
 from pdf2image import convert_from_bytes
 from PIL import Image
 import pytesseract
+
+app = FastAPI()
 
 def detect_rotation_angle(image: Image.Image) -> int:
     try:
@@ -24,13 +26,10 @@ def correct_image_rotation(pil_image: Image.Image, angle: int) -> Image.Image:
         return pil_image.rotate(-270, expand=True)
     return pil_image
 
-def main(req: func.HttpRequest) -> func.HttpResponse:
+@app.post("/rotate")
+async def rotate_pdf(file: UploadFile = File(...)):
     try:
-        file = req.files.get("file")
-        if not file:
-            return func.HttpResponse("Missing PDF file", status_code=400)
-
-        contents = file.stream.read()
+        contents = await file.read()
         images = convert_from_bytes(contents, dpi=300)
 
         rotated_images = []
@@ -43,11 +42,13 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             output_path = f"{tmpdir}/rotated_output.pdf"
             rotated_images[0].save(output_path, save_all=True, append_images=rotated_images[1:])
             with open(output_path, "rb") as f:
-                return func.HttpResponse(
-                    f.read(),
-                    mimetype="application/pdf",
-                    headers={"Content-Disposition": "attachment; filename=rotated_output.pdf"}
-                )
+                pdf_bytes = f.read()
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=rotated_output.pdf"}
+        )
 
     except Exception as e:
-        return func.HttpResponse(f"Error: {str(e)}", status_code=500)
+        return Response(content=f"Error: {str(e)}", status_code=500)
