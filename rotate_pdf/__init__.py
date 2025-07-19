@@ -1,11 +1,11 @@
-from fastapi import FastAPI, UploadFile, File, Response
+from fastapi import APIRouter, UploadFile, File, Response
 import tempfile
 import os
 from pdf2image import convert_from_bytes
 from PIL import Image
 import pytesseract
 
-app = FastAPI()
+router = APIRouter()
 
 def detect_rotation_angle(image: Image.Image) -> int:
     try:
@@ -26,7 +26,7 @@ def correct_image_rotation(pil_image: Image.Image, angle: int) -> Image.Image:
         return pil_image.rotate(-270, expand=True)
     return pil_image
 
-@app.post("/rotate")
+@router.post("/rotate")
 async def rotate_pdf(file: UploadFile = File(...)):
     try:
         contents = await file.read()
