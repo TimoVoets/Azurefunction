@@ -1,26 +1,26 @@
-import azure.functions as func
+from fastapi import APIRouter, UploadFile, File, Form, Response
 import tempfile
 import PyPDF2
 
-def main(req: func.HttpRequest) -> func.HttpResponse:
+router = APIRouter()
+
+@router.post("/split")
+async def split_pdf(file: UploadFile = File(...), page_number: int = Form(...)):
     try:
-        file = req.files.get("file")
-        page_number_str = req.form.get("page_number")
+        # Lees het geüploade bestand in bytes
+        contents = await file.read()
 
-        if not file or not page_number_str:
-            return func.HttpResponse("Missing file or page_number", status_code=400)
-
-        page_number = int(page_number_str)
         if page_number < 1:
-            return func.HttpResponse("Page number must be >= 1", status_code=400)
+            return Response(content="Page number must be >= 1", status_code=400)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             input_path = f"{tmpdir}/input.pdf"
-            file.save(input_path)
+            with open(input_path, "wb") as f:
+                f.write(contents)
 
             reader = PyPDF2.PdfReader(input_path)
             if page_number > len(reader.pages):
-                return func.HttpResponse("Page number out of range", status_code=400)
+                return Response(content="Page number out of range", status_code=400)
 
             writer = PyPDF2.PdfWriter()
             writer.add_page(reader.pages[page_number - 1])
@@ -30,13 +30,13 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
                 writer.write(f_out)
 
             with open(output_path, "rb") as f:
-                return func.HttpResponse(
-                    f.read(),
-                    mimetype="application/pdf",
-                    headers={
-                        "Content-Disposition": f"attachment; filename=page_{page_number}.pdf"
-                    }
-                )
+                pdf_bytes = f.read()
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=page_{page_number}.pdf"}
+        )
 
     except Exception as e:
-        return func.HttpResponse(f"Error: {str(e)}", status_code=500)
+        return Response(content=f"Error: {str(e)}", status_code=500)
